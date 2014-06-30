@@ -1,0 +1,32 @@
+{
+  "name": "fiat",
+  "version": "0.0.1",
+  "description": "A node.js library for serial bill acceptors",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:projectskyhook/fiat.git"
+  },
+  "keywords": [
+    "bill",
+    "acceptor",
+    "fiat",
+    "skyhook",
+    "bitcoin",
+    "atm",
+    "vending",
+    "serial"
+  ],
+  "author": "Kyle Drake",
+  "license": "BSD",
+  "bugs": {
+    "url": "https://github.com/projectskyhook/fiat/issues"
+  },
+  "homepage": "https://github.com/projectskyhook/fiat",
+  "dependencies": {
+    "serialport": "*"
+  }
+}
