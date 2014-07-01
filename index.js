@@ -20,7 +20,7 @@ function Fiat(path, driver) {
 	})
 
 	self.serial.on('data', function(data) {
-	  console.log('data received: ' + data)
+	  console.log('data received: ', data)
 	})
 
 	events.EventEmitter.call(this)
