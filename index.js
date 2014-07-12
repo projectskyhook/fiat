@@ -2,25 +2,31 @@ var events 		 = require('events')
 var util       = require('util')
 var SerialPort = require('serialport').SerialPort
 
-var drivers = {
-	pti: require('./drivers/pti')
-}
+function Fiat(path, opts) {
+	this.opts = opts || { debug: false }
+	this.serial = new SerialPort(path, this.config.serial)
 
-function Fiat(path, driver) {
-	if(!drivers[driver])
-		throw new Error('invalid driver')
-
-	this.driver = drivers[driver]
-	this.serial = new SerialPort(path, this.driver.config.serial)
+	// This flips for each new message.
+	this.ack = 0x1
 
 	var self = this
+	this.bytes = []
 
 	this.serial.on('open', function() {
 		self.emit('open')
 	})
 
-	self.serial.on('data', function(data) {
-	  console.log('data received: ', data)
+	this.serial.on('data', function(byte) {
+		self.bytes.push(byte)
+		if(self.bytes.length == self.config.receiveBufferSize) {
+			var buffer = Buffer.concat(self.bytes)
+			self.bytes = []
+
+			if(self.opts.debug)
+				console.log("<< "+buffer.toString('hex'))
+
+			self.processReceived(buffer)
+		}
 	})
 
 	events.EventEmitter.call(this)
@@ -28,19 +34,135 @@ function Fiat(path, driver) {
 
 util.inherits(Fiat, events.EventEmitter)
 
-Fiat.prototype.acceptBill = function(billsArray, callback) {
+Fiat.prototype.processReceived = function(buffer) {
+	if(buffer[3] & 2) {
+		this.setStatus('accepting')
+		this.emit('accepting')
+	} else if(buffer[3] & 4) {
+		if(this.status != 'escrowed') {
+			var amount = undefined
+			if(buffer[5] == 0x08) // $1
+				amount = 1
+			if(buffer[5] == 0x10) // $2
+				amount = 2
+			if(buffer[5] == 0x18) // $5
+				amount = 5
+			if(buffer[5] == 0x20) // $10
+				amount = 10
+			if(buffer[5] == 0x28) // $20
+				amount = 20
+			if(buffer[5] == 0x30) // $50
+				amount = 50
+			if(buffer[5] == 0x38) // $100
+				amount = 50
+
+			this.emit('escrow', amount)
+		}
+
+		console.log(buffer)
+
+		this.setStatus('escrowed')
+	} else if(buffer[3] & 8) {
+		this.setStatus('stacking')
+	} else {
+		this.setStatus('idling')
+	}
+}
+
+Fiat.prototype.stack = function() {
+	var msg = this.msg('stack')
+	this.serial.write(msg)
+}
+
+Fiat.prototype.reject = function() {
+	this.serial.write(this.msg('reject'))
+}
+
+Fiat.prototype.setStatus = function(status) {
+	if(this.status == status)
+		return
+
+	this.status = status
+
+	if(this.opts.debug)
+		console.log('status: '+status)
+}
+
+Fiat.prototype.accept = function() {
 	var self = this
+	var msg = this.msg('escrow')
 
-	var msg = self.driver.msg(billsArray, 'stack')
+	if(this.opts.debug) {
+		console.log('>> '+msg.toString('hex'))
+	}
 
-	this.acceptLoop = setInterval(function() {
-		self.serial.write(msg)
-		console.log(msg)
+	this.serial.write(msg)
+
+	this.loop = setTimeout(function() {
+		self.accept()
 	}, 100)
 }
 
-Fiat.prototype.stopAcceptingBill = function() {
-	clearInterval(this.acceptLoop)
+Fiat.prototype.config = {
+	acceptedBills: ['all of them'],
+	receiveBufferSize: 11,
+	serial: {
+		baudrate: 9600,
+		databits: 7,
+		stopbits: 1,
+		parity: 'even',
+		bufferSize: 1
+	},
+	msg: {
+		stx: 0x02,
+		etx: 0x03,
+		msgType: 0x10,
+		data: {
+			escrow: 0x10,
+			stack: 0x20,
+			reject: 0x40
+		}
+	}
 }
+
+Fiat.prototype.flipMsgAck = function() {
+	this.ack = (this.ack == 0x0) ? 0x1 : 0x0
+	return this.ack
+}
+
+Fiat.prototype.checksum = function(msg) {
+	var checksum = 0x00
+
+	for(var i=1; i<msg.length-1; i++)
+		checksum = checksum ^ msg[i]
+
+	return checksum
+}
+
+Fiat.prototype.acceptedBillsByte = function() {
+	// hardcoded to everything for now
+	return 0x7F
+}
+
+Fiat.prototype.msg = function(data) {
+	var dataHex = this.config.msg.data[data]
+
+	var msgType = this.config.msg.msgType
+
+	var msg = [
+		this.config.msg.stx,
+		0x08, // length
+		msgType | this.flipMsgAck(),
+		this.acceptedBillsByte(),
+		dataHex,
+		0x00,
+		this.config.msg.etx
+	]
+
+	msg.push(this.checksum(msg))
+
+	return new Buffer(msg)
+}
+
 
 module.exports = Fiat

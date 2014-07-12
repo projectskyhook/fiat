@@ -1,14 +1,35 @@
 var Fiat = require('./index.js')
 
-var fiat = new Fiat('/dev/ttyUSB0', 'pti')
+var fiat = new Fiat('/dev/ttyUSB0', {debug: true	})
 
 fiat.on('open', function() {
-	fiat.acceptBill([1, 2, 5, 10, 20, 50, 100])
+	fiat.accept()
+})
+
+fiat.on('escrow', function(amount) {
+	console.log('Received bill '+amount)
+
+	if(amount == 5)
+		fiat.reject()
+	else
+		fiat.stack()
 })
 
 /*
-fiat.on('billAccepted', function() {
-	console.log('Bill Accepted!')
-	fiat.stackBill()
+
+fiat.on('open', function() {
+	fiat.accept()
 })
+
+fiat.on('escrow', function(amount) {
+	fiat.stack()
+	// woo awesome let's get some more
+	fiat.accept()
+})
+
+fiat.on('error', function(type) {
+	console.log(type)
+	fiat.refund()
+})
+
 */
