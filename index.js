@@ -35,6 +35,10 @@ function Fiat(path, opts) {
 util.inherits(Fiat, events.EventEmitter)
 
 Fiat.prototype.processReceived = function(buffer) {
+  
+  if(buffer[4] >> 4 != 1)
+    return this.setError('bill_cassette_missing')
+
   if(buffer[3] & 2) {
     this.setStatus('accepting')
     this.emit('accepting')
@@ -76,6 +80,15 @@ Fiat.prototype.reject = function() {
   this.serial.write(this.msg('reject'))
 }
 
+Fiat.prototype.setError = function(type) {
+  if(this.status == 'error')
+    return
+
+  this.stop()
+  this.setStatus('error')
+  this.emit('error', type)
+}
+
 Fiat.prototype.setStatus = function(status) {
   if(this.status == status)
     return
@@ -98,7 +111,11 @@ Fiat.prototype.accept = function() {
 
   this.loop = setTimeout(function() {
     self.accept()
-  }, 100)
+  }, 200)
+}
+
+Fiat.prototype.stop = function() {
+  clearTimeout(this.loop)
 }
 
 Fiat.prototype.config = {
