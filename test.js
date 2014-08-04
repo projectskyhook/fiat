@@ -1,6 +1,6 @@
 var Fiat = require('./index.js')
 
-var fiat = new Fiat('/dev/ttyUSB0', {debug: true})
+var fiat = new Fiat('/dev/ttyUSB0', {debug: false})
 
 fiat.on('open', function() {
   fiat.accept()
@@ -9,8 +9,8 @@ fiat.on('open', function() {
 fiat.on('escrow', function(billType) {
   var amount = Fiat.utils.billTypeToUSD(billType)
 
-  if(amount == 1) {
-    console.log("Sorry, we don't accept $1 bills!")
+  if(amount == 5) {
+    console.log("Sorry, we don't accept $5 bills!")
     fiat.reject()
   } else
     fiat.stack()

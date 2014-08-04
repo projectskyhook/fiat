@@ -27,6 +27,6 @@
   },
   "homepage": "https://github.com/projectskyhook/fiat",
   "dependencies": {
-    "serialport": "*"
+    "serialport": "1.4.2"
   }
 }

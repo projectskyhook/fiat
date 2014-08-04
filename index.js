@@ -1,10 +1,32 @@
 var events     = require('events')
 var util       = require('util')
-var SerialPort = require('serialport').SerialPort
+var serialport = require('serialport')
+
+byteLength = function(length) {
+  var data = new Buffer(0);
+  return function(emitter, buffer) {
+    data = Buffer.concat([data, buffer])
+    while (data.length >= length) {
+      var out = data.slice(0, length)
+      data = data.slice(length)
+      emitter.emit('data', out)
+    }
+  }
+}
 
 function Fiat(path, opts) {
   this.opts = opts || { debug: false }
-  this.serial = new SerialPort(path, this.config.serial)
+
+  var SerialPort = serialport.SerialPort;
+
+  this.serial = new SerialPort(path, {
+    baudrate: 9600,
+    databits: 7,
+    stopbits: 1,
+    parity: 'even',
+    bufferSize: 256,
+    parser: byteLength(11)
+  })
 
   // This flips for each new message.
   this.ack = 0x1
@@ -16,17 +38,11 @@ function Fiat(path, opts) {
     self.emit('open')
   })
 
-  this.serial.on('data', function(byte) {
-    self.bytes.push(byte)
-    if(self.bytes.length == self.config.receiveBufferSize) {
-      var buffer = Buffer.concat(self.bytes)
-      self.bytes = []
+  this.serial.on('data', function(buffer) {
+    if(self.opts.debug)
+      console.log("<< "+buffer.toString('hex'))
 
-      if(self.opts.debug)
-        console.log("<< "+buffer.toString('hex'))
-
-      self.processReceived(buffer)
-    }
+    self.processReceived(buffer)
   })
 
   events.EventEmitter.call(this)
@@ -35,14 +51,18 @@ function Fiat(path, opts) {
 util.inherits(Fiat, events.EventEmitter)
 
 Fiat.prototype.processReceived = function(buffer) {
-  
-  if(buffer[4] >> 4 != 1)
-    return this.setError('bill_cassette_missing')
+  var self = this
+
+  if(buffer[3] & 1)
+    this.setStatus('idling')
 
   if(buffer[3] & 2) {
     this.setStatus('accepting')
     this.emit('accepting')
-  } else if(buffer[3] & 4) {
+  }
+
+  if(buffer[3] & 4) {
+
     if(this.status != 'escrowed') {
       var billType = undefined
       if(buffer[5] == 0x08) // $1
@@ -64,11 +84,32 @@ Fiat.prototype.processReceived = function(buffer) {
     }
 
     this.setStatus('escrowed')
-  } else if(buffer[3] & 8) {
-    this.setStatus('stacking')
-  } else {
-    this.setStatus('idling')
   }
+
+  if(buffer[3] & 8) {
+    this.setStatus('stacking')
+  }
+
+  if(buffer[4] << 4 == 0)
+    this.setError('cassette_missing')
+
+  if(buffer[4] & 1)
+    this.setError('cheating_suspected')
+
+  if(buffer[4] & 2)
+    this.setError('bill_rejected')
+
+  if(buffer[4] & 4)
+    this.setError('bill_jammed')
+
+  if(buffer[4] & 8)
+    this.setError('stacker_full')
+
+  if(buffer[5] & 2)
+    this.setError('invalid_command')
+
+  if(buffer[5] & 4)
+    this.setError('acceptor_failure')
 }
 
 Fiat.prototype.stack = function() {
@@ -101,17 +142,13 @@ Fiat.prototype.setStatus = function(status) {
 
 Fiat.prototype.accept = function() {
   var self = this
-  var msg = this.msg('escrow')
+  var msg = self.msg('escrow')
 
-  if(this.opts.debug) {
-    console.log('>> '+msg.toString('hex'))
-  }
-
-  this.serial.write(msg)
-
-  this.loop = setTimeout(function() {
-    self.accept()
-  }, 200)
+  self.loop = setInterval(function() {
+    if(self.opts.debug)
+      console.log('>> '+msg.toString('hex'))
+    self.serial.write(msg)
+  }, 100)
 }
 
 Fiat.prototype.stop = function() {
@@ -120,14 +157,6 @@ Fiat.prototype.stop = function() {
 
 Fiat.prototype.config = {
   acceptedBills: ['all of them'],
-  receiveBufferSize: 11,
-  serial: {
-    baudrate: 9600,
-    databits: 7,
-    stopbits: 1,
-    parity: 'even',
-    bufferSize: 1
-  },
   msg: {
     stx: 0x02,
     etx: 0x03,
@@ -196,7 +225,7 @@ Fiat.utils = {
     if(type == 7)
       return 100
 
-    throw new Error('invalid type')
+    throw new Error('invalid type: '+type)
   }
 }
 
