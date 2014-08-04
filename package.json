@@ -1,7 +1,7 @@
 {
   "name": "fiat",
   "version": "0.0.1",
-  "description": "A node.js library for serial bill acceptors",
+  "description": "A node.js library for serial bill acceptors (currently only supports the APEX 7000)",
   "main": "index.js",
   "scripts": {
     "test": "mocha"
