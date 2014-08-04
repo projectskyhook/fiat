@@ -12,8 +12,12 @@ fiat.on('escrow', function(billType) {
   if(amount == 5) {
     console.log("Sorry, we don't accept $5 bills!")
     fiat.reject()
-  } else
+  } else {
     fiat.stack()
+  }
+
+  // Call when done:
+  // fiat.stop()
 })
 
 fiat.on('error', function(type) {
@@ -21,22 +25,3 @@ fiat.on('error', function(type) {
   console.log('ERROR: '+type)
   fiat.accept()
 })
-
-/*
-
-fiat.on('open', function() {
-  fiat.accept()
-})
-
-fiat.on('escrow', function(amount) {
-  fiat.stack()
-  // woo awesome let's get some more
-  fiat.accept()
-})
-
-fiat.on('error', function(type) {
-  console.log(type)
-  fiat.refund()
-})
-
-*/
